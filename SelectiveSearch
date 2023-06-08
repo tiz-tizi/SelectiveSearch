@@ -1,0 +1,70 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import rawpy
+import cv2
+import os
+
+# import functions from 03\functions.py
+import importlib.util
+module_path = 'C:/Codes/ProjCV/exercise_3_data/03/functions.py'
+spec = importlib.util.spec_from_file_location('functions', module_path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+demosaicing = getattr(module, 'demosaicing')
+white_balance = getattr(module, 'white_balance')
+gamma_correction = getattr(module, 'gamma_correction')
+
+
+
+folder_path = 'C:/Codes/ProjCV/exercise_3_data/06'
+
+# Load brightest raw data 00.CR3
+raw = rawpy.imread('00.CR3')
+h = np.array(raw.raw_image_visible)
+scaled_data = (h * (256.0/16384.0)).astype(np.uint8)
+
+# For each next raw file:
+CR3_list = []
+coefficient = 2.0
+t = 0.8*np.max(scaled_data)  # threshold
+for filename in os.listdir(folder_path):
+    if filename.endswith(".CR3") and not filename.endswith("00.CR3"):
+        raw = rawpy.imread(filename)
+        i = np.array(raw.raw_image_visible)  # RGGB ????
+        i = (i * (256.0 / 16384.0)).astype(np.float32)
+        CR3_list.append(i)
+
+        # Multiply i by the exposure difference to h
+        i *= coefficient
+        coefficient *= 2.0
+
+        h[h<t] = i[h<t]
+
+
+kernel = np.ones((3, 3))
+image = demosaicing(scaled_data, kernel)
+
+# plt.imshow(np.uint8(image))
+# plt.title('Demosaiced image')
+# plt.savefig('demosaiced_image.png')
+# plt.show()
+
+data = gamma_correction(image, 1.5)
+
+data_wb = white_balance(data)
+
+plt.imshow(np.uint8(data_wb))
+plt.title('White balanced image')
+plt.savefig('white_balanced_image.png')
+plt.show()
+
+# Compute the logarithm of the HDR raw data
+log_hdr_raw = np.log(data_wb + 1e-6)
+
+# Scale the data to [0, 255]
+scaled_hdr_raw = (log_hdr_raw - np.min(log_hdr_raw)) / (np.max(log_hdr_raw) - np.min(log_hdr_raw))
+scaled_hdr_raw = (scaled_hdr_raw * 255).astype(np.uint8)
+
+# Save the HDR image
+cv2.imwrite('result.jpg', scaled_hdr_raw)
+
